@@ -405,6 +405,38 @@
   .status-text.success{color:var(--green); font-style:normal; font-weight:600;}
   .status-text.error{color:var(--maroon); font-style:normal; font-weight:600;}
 
+  /* ---------- Streak banner (lookup result) ---------- */
+  .streak-banner{
+    display:flex; align-items:center; gap:12px;
+    padding:14px 18px; margin-bottom:18px;
+    border:1px solid var(--gold); background:#FBF0D9;
+  }
+  .streak-banner.gentle{
+    border-color:var(--line); background:#F4EEDD;
+  }
+  .streak-banner .streak-icon{font-size:1.5rem; flex-shrink:0; line-height:1;}
+  .streak-banner .streak-text{font-size:.92rem; color:var(--ink); line-height:1.4;}
+  .streak-banner .streak-text strong{color:var(--maroon);}
+
+  /* ---------- Home page reflection ---------- */
+  .reflection-panel{
+    background:linear-gradient(160deg, var(--indigo-deep), var(--indigo));
+    color:#F3E9D2; padding:26px clamp(18px,4vw,36px);
+    margin:0 0 30px; border-left:4px solid var(--gold);
+  }
+  .reflection-panel .reflection-label{
+    font-size:.72rem; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--gold-soft); font-weight:700; margin-bottom:8px;
+  }
+  .reflection-panel p{
+    font-family:'Fraunces', serif; font-style:italic;
+    font-size:1.08rem; line-height:1.6; margin:0 0 10px; color:#FBF6E9;
+  }
+  .reflection-panel .reflection-cta{
+    font-family:'Work Sans', sans-serif; font-style:normal;
+    font-size:.86rem; color:#D9CBAA; margin:0;
+  }
+
   footer.site{
     text-align:center; color:var(--ink-soft); font-size:.78rem;
     padding:26px 16px 40px;
@@ -448,6 +480,12 @@
     </div>
 
     <div class="stat-strip" id="homeStats"></div>
+
+    <div class="reflection-panel">
+      <div class="reflection-label">A word before you begin</div>
+      <p>Krishna tells Arjuna that the restless mind is mastered not in a single effort, but through steady practice, returning to it again and again, year after year, until it becomes second nature. <em>(Bhagavad Gita, Chapter 6)</em></p>
+      <p class="reflection-cta">Sampoorna Bhagavad Gita Parayanam asks the same of us — not perfection in any one year, but the discipline of not missing a year. If 2025 slipped by, let 2026 be the year the streak begins again.</p>
+    </div>
 
     <div class="nav-grid">
       <div class="nav-card primary" data-goto="lookup">
@@ -681,6 +719,29 @@ function esc(s){
 }
 function isUrl(s){ return typeof s==='string' && s.trim().toLowerCase().startsWith('http'); }
 
+function getYearStatus(entry){
+  if(!entry || !entry.link) return 'no_data';
+  const s = entry.link.toString().trim();
+  if(!s) return 'no_data';
+  const sl = s.toLowerCase();
+  if(isUrl(s)) return 'completed';
+  if(sl.includes('missed')) return 'missed';
+  if(sl.includes('not applicable')) return 'not_applicable';
+  if(s.includes('?')) return 'pending';
+  return 'other';
+}
+
+/* Consecutive completed years counting back from the most recent year on record */
+function computeStreak(d){
+  const sorted = [...d.years].sort((a,b)=>b.year-a.year);
+  let streak = 0;
+  for(const y of sorted){
+    if(getYearStatus(y) === 'completed') streak++;
+    else break;
+  }
+  return streak;
+}
+
 function barRow(label, value, max, colorClass, valueLabel){
   const pct = max>0 ? Math.max(2, Math.round((value/max)*100)) : 0;
   return `<div class="bar-row">
@@ -859,6 +920,16 @@ function historicResultHtml(d){
       </table>`
     : `<p class="status-text">No participation years on record yet.</p>`;
 
+  const streak = computeStreak(d);
+  let streakBanner = '';
+  if(streak >= 2){
+    streakBanner = `<div class="streak-banner"><span class="streak-icon">🔥</span><span class="streak-text"><strong>${streak}-Year Streak!</strong> You've completed ${streak} years in a row — keep it going in 2026.</span></div>`;
+  } else if(streak === 1){
+    streakBanner = `<div class="streak-banner"><span class="streak-icon">🌱</span><span class="streak-text">You completed your parayan last year. One more year makes it a streak — see you in 2026!</span></div>`;
+  } else {
+    streakBanner = `<div class="streak-banner gentle"><span class="streak-icon">🙏</span><span class="streak-text">It's been a while since your last completed parayan. 2026 is a good year to begin again.</span></div>`;
+  }
+
   return `
     <div class="result-card">
       <div class="result-head">
@@ -870,6 +941,7 @@ function historicResultHtml(d){
         </div>
         <div class="batch-pill">Batch ${esc(d.batch||'—')}</div>
       </div>
+      ${streakBanner}
       <dl class="fact-grid">
         <div><dt>Buddy</dt><dd>${esc(d.buddy||'—')}</dd></div>
         <div><dt>Slot date</dt><dd>${esc(d.slot_date||'—')}</dd></div>
@@ -1269,6 +1341,7 @@ function renderAllYears(){
 
 /* ============ REPORTS ============ */
 const REPORTS = [
+  {key:'streaks', label:'Consistency Champions'},
   {key:'wr', label:'World Record Achievers'},
   {key:'pending2025', label:'Pending / Dropped — 2025'},
   {key:'buddyhist', label:'Buddy Needed — 2025 season'},
@@ -1276,7 +1349,7 @@ const REPORTS = [
   {key:'buddy2026', label:'Buddy Needed — 2026'},
   {key:'bookings2026', label:'All Bookings — 2026'},
 ];
-let currentReport = 'wr';
+let currentReport = 'streaks';
 
 function renderReportTabs(){
   document.getElementById('reportTabs').innerHTML = REPORTS.map(r=>
@@ -1320,7 +1393,23 @@ function renderReportContent(){
   const hist = APP_DATA.historic;
   const b26 = APP_DATA.booking2026;
 
-  if(currentReport==='wr'){
+  if(currentReport==='streaks'){
+    const withStreaks = hist.devotees
+      .map(d => ({ name:d.name, batch:d.batch, streak:computeStreak(d), completed:d.completed, status:d.status }))
+      .filter(d => d.streak >= 2)
+      .sort((a,b) => b.streak - a.streak || a.name.localeCompare(b.name));
+    makeFilterableReport(el, {
+      desc: 'Devotees currently on a streak of 2 or more consecutive completed years — a running list to celebrate consistency and inspire everyone else.',
+      rows: withStreaks,
+      columns: [
+        {label:'Name', key:'name'}, {label:'Batch', key:'batch'},
+        {label:'Current Streak', get:r=>r.streak+' years'},
+        {label:'Total Completed', key:'completed'},
+      ],
+      filename:'consistency_champions.csv',
+      filterFields:['name','batch'],
+    });
+  } else if(currentReport==='wr'){
     makeFilterableReport(el, {
       desc: 'Devotees who have received both the World Record certificate and medal.',
       rows: hist.wr_achievers,
