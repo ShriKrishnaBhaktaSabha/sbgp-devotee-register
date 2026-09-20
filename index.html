@@ -414,6 +414,8 @@
     font-family:'Fraunces', serif; font-size:1.05rem; color:var(--maroon);
     margin-bottom:8px; border-bottom:1px solid var(--line); padding-bottom:6px;
   }
+  .playlist-links{ list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:10px 20px; }
+  .playlist-links li{ font-size:.92rem; }
 
   /* ---------- Streak banner (lookup result) ---------- */
   .streak-banner{
@@ -1109,18 +1111,16 @@ function renderPlaylistResult(person){
     byTitle[t].push(e);
   });
   const titleBlocks = Object.keys(byTitle).sort().map(title=>{
-    const rows = byTitle[title].map(e=>{
-      const watch = isUrl(e.videoLink)
-        ? `<a class="watch" href="${esc(e.videoLink)}" target="_blank" rel="noopener">Watch ▸</a>`
-        : `<span class="status-text">${esc(e.videoLink || 'No link yet')}</span>`;
-      return `<tr><td>${esc(e.date||'—')}</td><td>${watch}</td><td>${esc(e.notes||'—')}</td></tr>`;
+    const entries = byTitle[title];
+    const links = entries.map((e,i)=>{
+      const label = entries.length > 1 ? `Watch (${i+1}) ▸` : 'Watch ▸';
+      return isUrl(e.videoLink)
+        ? `<li><a class="watch" href="${esc(e.videoLink)}" target="_blank" rel="noopener">${label}</a></li>`
+        : `<li><span class="status-text">No link yet</span></li>`;
     }).join('');
     return `<div class="playlist-title-block">
       <h4>${esc(title)}</h4>
-      <table class="year-table">
-        <thead><tr><th>Date</th><th>Video</th><th>Notes</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <ul class="playlist-links">${links}</ul>
     </div>`;
   }).join('');
 
