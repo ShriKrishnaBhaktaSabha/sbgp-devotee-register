@@ -414,8 +414,13 @@
     font-family:'Fraunces', serif; font-size:1.05rem; color:var(--maroon);
     margin-bottom:8px; border-bottom:1px solid var(--line); padding-bottom:6px;
   }
-  .playlist-links{ list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:10px 20px; }
-  .playlist-links li{ font-size:.92rem; }
+  .playlist-links{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; }
+  .playlist-links li{ font-size:.92rem; border-bottom:1px solid #EFE8D6; }
+  .playlist-links li a.watch{
+    display:block; padding:9px 4px; text-decoration:none;
+    color:var(--indigo); font-weight:600;
+  }
+  .playlist-links li a.watch:hover{ color:var(--indigo-deep); background:var(--paper); }
 
   /* ---------- Streak banner (lookup result) ---------- */
   .streak-banner{
@@ -1113,10 +1118,10 @@ function renderPlaylistResult(person){
   const titleBlocks = Object.keys(byTitle).sort().map(title=>{
     const entries = byTitle[title];
     const links = entries.map((e,i)=>{
-      const label = entries.length > 1 ? `Watch (${i+1}) ▸` : 'Watch ▸';
+      const label = (e.subTitle && e.subTitle.trim()) ? e.subTitle.trim() : (entries.length > 1 ? `Video ${i+1}` : 'Watch');
       return isUrl(e.videoLink)
-        ? `<li><a class="watch" href="${esc(e.videoLink)}" target="_blank" rel="noopener">${label}</a></li>`
-        : `<li><span class="status-text">No link yet</span></li>`;
+        ? `<li><a class="watch" href="${esc(e.videoLink)}" target="_blank" rel="noopener">${esc(label)} ▸</a></li>`
+        : `<li><span class="status-text">${esc(label)} — no link yet</span></li>`;
     }).join('');
     return `<div class="playlist-title-block">
       <h4>${esc(title)}</h4>
