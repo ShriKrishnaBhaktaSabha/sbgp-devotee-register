@@ -388,12 +388,14 @@
   .form-field input[type=text],
   .form-field input[type=date],
   .form-field input[type=email],
-  .form-field select{
+  .form-field select,
+  .form-field textarea{
     width:100%; padding:10px 12px; border:1px solid var(--line);
     background:#fff; font-family:'Work Sans',sans-serif; font-size:.92rem; color:var(--ink);
     box-sizing:border-box; height:42px;
   }
-  .form-field input:focus, .form-field select:focus{border-color:var(--indigo);}
+  .form-field textarea{ height:auto; min-height:120px; resize:vertical; }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{border-color:var(--indigo);}
   .form-row-pair{
     display:grid; grid-template-columns:1fr 1fr; gap:20px;
   }
@@ -463,6 +465,7 @@
     <button data-view="allyears">All-Years Overview</button>
     <button data-view="reports">Reports</button>
     <button data-view="upcoming">2026 Gita Jayanti</button>
+    <button data-view="feedback">Feedback</button>
   </nav>
 </header>
 
@@ -697,6 +700,49 @@
       <div class="table-wrap"><table class="data-table" id="awaitingTable"></table></div>
       <div class="row-count" id="awaitingCount"></div>
     </div>
+  </section>
+
+  <!-- FEEDBACK (write-only from a devotee's side; visible only in the admin's Google Sheet) -->
+  <section class="view" id="view-feedback">
+    <div class="view-head">
+      <h2>Share Your Feedback</h2>
+      <p class="lede">Suggestions, reviews, or issues — this goes straight to the Sabha's admin team, and isn't shown anywhere else on this site. Name and mobile number are optional; leave them blank if you'd rather stay anonymous.</p>
+    </div>
+
+    <div id="feedbackNotConfigured" class="panel hidden">
+      <h4>Set-up pending</h4>
+      <p class="lede" style="margin:0;">The admin needs to finish a one-time setup before feedback can be submitted here. Nothing to do on your end — please check back later.</p>
+    </div>
+
+    <form id="feedbackForm" class="panel" style="max-width:640px;">
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="fbType">Type *</label>
+          <select id="fbType">
+            <option value="Suggestion">Suggestion</option>
+            <option value="Review">Review</option>
+            <option value="Issue">Issue</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="fbMessage">Your Message *</label>
+          <textarea id="fbMessage" placeholder="Type your feedback here…"></textarea>
+        </div>
+        <div class="form-row-pair">
+          <div class="form-field">
+            <label for="fbName">Your Name (optional)</label>
+            <input type="text" id="fbName" placeholder="Leave blank to stay anonymous" autocomplete="off">
+          </div>
+          <div class="form-field">
+            <label for="fbContact">Mobile Number (optional)</label>
+            <input type="text" id="fbContact" placeholder="If you'd like a reply" inputmode="numeric" maxlength="10" autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn" id="fbSubmitBtn" style="margin-top:18px;">Submit Feedback</button>
+      <span id="fbMsg" class="status-text" style="margin-left:12px;"></span>
+    </form>
   </section>
 
 </main>
@@ -1268,6 +1314,61 @@ if(profileForm){
   });
 }
 
+/* ============ FEEDBACK (write-only; admin reads it in the Sheet) ============ */
+const feedbackNotConfigured = document.getElementById('feedbackNotConfigured');
+const feedbackForm = document.getElementById('feedbackForm');
+const fbContact = document.getElementById('fbContact');
+const fbMsg = document.getElementById('fbMsg');
+
+function initFeedbackTab(){
+  if(!PROFILE_API_URL){
+    feedbackNotConfigured.classList.remove('hidden');
+    feedbackForm.classList.add('hidden');
+  }
+}
+
+if(fbContact){
+  fbContact.addEventListener('input', ()=>{
+    fbContact.value = fbContact.value.replace(/[^0-9]/g, '').slice(0,10);
+  });
+}
+
+if(feedbackForm){
+  feedbackForm.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const messageVal = document.getElementById('fbMessage').value.trim();
+    if(!messageVal){
+      fbMsg.textContent = 'Please write a message before submitting.';
+      fbMsg.className = 'status-text error';
+      return;
+    }
+    const payload = {
+      action: 'submitFeedback',
+      type: document.getElementById('fbType').value,
+      message: messageVal,
+      name: document.getElementById('fbName').value.trim(),
+      contact: fbContact.value.trim(),
+    };
+    fbMsg.textContent = 'Submitting…';
+    fbMsg.className = 'status-text';
+    try{
+      const res = await fetch(PROFILE_API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Submit failed');
+      feedbackForm.reset();
+      fbMsg.textContent = 'Thank you! Your feedback has been received.';
+      fbMsg.className = 'status-text success';
+    } catch(err){
+      fbMsg.textContent = 'Could not submit right now — please try again shortly.';
+      fbMsg.className = 'status-text error';
+    }
+  });
+}
+
 /* ============ YEARLY DASHBOARDS ============ */
 const YEARS = ['2021','2022','2023','2024','2025','2026'];
 let currentYear = '2021';
@@ -1608,6 +1709,7 @@ renderReportTabs();
 renderReportContent();
 renderUpcoming();
 initProfileTab();
+initFeedbackTab();
 
 </script>
 </body>
