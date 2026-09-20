@@ -407,6 +407,14 @@
   .status-text.success{color:var(--green); font-style:normal; font-weight:600;}
   .status-text.error{color:var(--maroon); font-style:normal; font-weight:600;}
 
+  /* ---------- Playlist ---------- */
+  .playlist-title-block{ margin-top:20px; }
+  .playlist-title-block:first-of-type{ margin-top:6px; }
+  .playlist-title-block h4{
+    font-family:'Fraunces', serif; font-size:1.05rem; color:var(--maroon);
+    margin-bottom:8px; border-bottom:1px solid var(--line); padding-bottom:6px;
+  }
+
   /* ---------- Streak banner (lookup result) ---------- */
   .streak-banner{
     display:flex; align-items:center; gap:12px;
@@ -460,6 +468,7 @@
   <nav class="tabs" id="tabNav">
     <button data-view="home" class="active">Home</button>
     <button data-view="lookup">Find My Record</button>
+    <button data-view="playlist">My Playlist</button>
     <button data-view="profile">My Profile</button>
     <button data-view="yearly">Yearly Dashboards</button>
     <button data-view="allyears">All-Years Overview</button>
@@ -530,6 +539,25 @@
       <div class="suggestions hidden" id="suggestions"></div>
     </div>
     <div id="lookupResult"></div>
+  </section>
+
+  <!-- MY PLAYLIST (live, backed by a Google Sheet) -->
+  <section class="view" id="view-playlist">
+    <div class="view-head">
+      <h2>My Playlist</h2>
+      <p class="lede">Type your name or mobile number to see every stotra and parayanam video you've recorded with us — Vishnu Sahasranamam, Lalita Sahasranamam, Adityahridayam, and more, grouped in one place.</p>
+    </div>
+
+    <div id="playlistNotConfigured" class="panel hidden">
+      <h4>Set-up pending</h4>
+      <p class="lede" style="margin:0;">The admin needs to finish a one-time setup before playlists can be shown here. Nothing to do on your end — please check back later.</p>
+    </div>
+
+    <div class="search-box" id="playlistSearchBox">
+      <input type="text" id="playlistSearchInput" placeholder="Enter your name or mobile number…" autocomplete="off">
+      <div class="suggestions hidden" id="playlistSuggestions"></div>
+    </div>
+    <div id="playlistResult"></div>
   </section>
 
   <!-- MY PROFILE (live, backed by a Google Sheet) -->
@@ -1058,6 +1086,88 @@ document.addEventListener('click', (e)=>{
   if(!e.target.closest('.search-box')) suggestionsEl.classList.add('hidden');
 });
 
+/* ============ MY PLAYLIST (live, backed by a Google Sheet) ============ */
+const playlistNotConfigured = document.getElementById('playlistNotConfigured');
+const playlistSearchBox = document.getElementById('playlistSearchBox');
+const playlistSearchInput = document.getElementById('playlistSearchInput');
+const playlistSuggestions = document.getElementById('playlistSuggestions');
+const playlistResult = document.getElementById('playlistResult');
+let playlistDebounceTimer = null;
+
+function initPlaylistTab(){
+  if(!PROFILE_API_URL){
+    playlistNotConfigured.classList.remove('hidden');
+    playlistSearchBox.classList.add('hidden');
+  }
+}
+
+function renderPlaylistResult(person){
+  const byTitle = {};
+  (person.entries || []).forEach(e=>{
+    const t = (e.title || 'Untitled').trim() || 'Untitled';
+    byTitle[t] = byTitle[t] || [];
+    byTitle[t].push(e);
+  });
+  const titleBlocks = Object.keys(byTitle).sort().map(title=>{
+    const rows = byTitle[title].map(e=>{
+      const watch = isUrl(e.videoLink)
+        ? `<a class="watch" href="${esc(e.videoLink)}" target="_blank" rel="noopener">Watch ▸</a>`
+        : `<span class="status-text">${esc(e.videoLink || 'No link yet')}</span>`;
+      return `<tr><td>${esc(e.date||'—')}</td><td>${watch}</td><td>${esc(e.notes||'—')}</td></tr>`;
+    }).join('');
+    return `<div class="playlist-title-block">
+      <h4>${esc(title)}</h4>
+      <table class="year-table">
+        <thead><tr><th>Date</th><th>Video</th><th>Notes</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  return `<div class="result-card">
+    <div class="result-head">
+      <div><h3>${esc(person.name || 'Devotee')}</h3></div>
+    </div>
+    ${titleBlocks || '<p class="status-text">No videos on record yet.</p>'}
+  </div>`;
+}
+
+if(playlistSearchInput){
+  playlistSearchInput.addEventListener('input', ()=>{
+    const q = playlistSearchInput.value.trim();
+    playlistResult.innerHTML = '';
+    clearTimeout(playlistDebounceTimer);
+    if(q.length < 2){ playlistSuggestions.classList.add('hidden'); return; }
+    playlistDebounceTimer = setTimeout(async ()=>{
+      try{
+        const res = await fetch(`${PROFILE_API_URL}?action=searchPlaylist&q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if(!data.ok || !data.results || data.results.length===0){
+          playlistSuggestions.classList.add('hidden');
+          return;
+        }
+        playlistSuggestions.innerHTML = data.results.map((r,i)=>
+          `<div data-idx="${i}"><span>${esc(r.name||'Unnamed')}</span><span class="meta">${r.entries.length} video${r.entries.length===1?'':'s'}</span></div>`
+        ).join('');
+        playlistSuggestions.classList.remove('hidden');
+        playlistSuggestions.querySelectorAll('div').forEach((row,i)=>{
+          row.addEventListener('click', ()=>{
+            playlistSuggestions.classList.add('hidden');
+            playlistSearchInput.value = data.results[i].name;
+            playlistResult.innerHTML = renderPlaylistResult(data.results[i]);
+          });
+        });
+      } catch(err){
+        playlistSuggestions.classList.add('hidden');
+      }
+    }, 400);
+  });
+}
+
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('#playlistSearchBox')) playlistSuggestions.classList.add('hidden');
+});
+
 /* ============ MY PROFILE (live, backed by a Google Sheet) ============ */
 /* Admin: after deploying the Apps Script web app (see setup instructions),
    paste its URL below between the quotes, then save this file. */
@@ -1490,7 +1600,6 @@ const REPORTS = [
   {key:'streaks', label:'Consistency Champions'},
   {key:'wr', label:'World Record Achievers'},
   {key:'pending2025', label:'Pending / Dropped — 2025'},
-  {key:'buddyhist', label:'Buddy Needed — 2025 season'},
   {key:'awaiting2026', label:'Awaiting a Slot — 2026'},
   {key:'buddy2026', label:'Buddy Needed — 2026'},
   {key:'bookings2026', label:'All Bookings — 2026'},
@@ -1578,16 +1687,6 @@ function renderReportContent(){
       ],
       filename:'pending_dropped_2025.csv',
       filterFields:['name','batch','status'],
-    });
-  } else if(currentReport==='buddyhist'){
-    makeFilterableReport(el, {
-      desc: 'Devotees flagged as needing a buddy during the 2025 season.',
-      rows: hist.buddy_needed,
-      columns: [
-        {label:'Name', key:'name'}, {label:'Slot date', key:'date'}, {label:'Slot', key:'slot'},
-      ],
-      filename:'buddy_needed_2025.csv',
-      filterFields:['name'],
     });
   } else if(currentReport==='awaiting2026'){
     makeFilterableReport(el, {
@@ -1710,6 +1809,7 @@ renderReportContent();
 renderUpcoming();
 initProfileTab();
 initFeedbackTab();
+initPlaylistTab();
 
 </script>
 </body>
