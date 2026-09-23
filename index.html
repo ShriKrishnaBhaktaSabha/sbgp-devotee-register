@@ -868,12 +868,40 @@ const LOGO_DATA_URI = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSU
 /* ============ Utilities ============ */
 function norm(s){ return (s||'').toString().trim().toLowerCase().replace(/\s+/g,' '); }
 function normContact(s){ return (s||'').toString().replace(/[^0-9]/g,'').slice(-10); }
+/* Sorts "Batch N (...)" rows numerically by N; anything without a
+   "Batch N" pattern (e.g. "New / not part of a batch") always sorts last. */
+function sortByBatchNumber(rows, labelKey){
+  function batchNum(label){
+    const m = /Batch\s*(\d+)/i.exec(label || '');
+    return m ? parseInt(m[1], 10) : Infinity;
+  }
+  return [...rows].sort((a, b) => {
+    const la = labelKey ? a[labelKey] : a;
+    const lb = labelKey ? b[labelKey] : b;
+    const na = batchNum(la), nb = batchNum(lb);
+    return na !== nb ? na - nb : String(la).localeCompare(String(lb));
+  });
+}
 /* Shows just enough of a phone number to confirm it's yours, without exposing the rest to a name-based search */
 function maskContact(c){
   if(!c) return '—';
   const digits = c.toString().replace(/[^0-9]/g,'').slice(-10);
   if(digits.length < 6) return esc(c);
   return esc(digits.slice(0,2) + 'XXXXXX' + digits.slice(-2));
+}
+/* Some devotees wrote a phone number directly into the free-text Buddy
+   field (e.g. "Kaveri Venkatesh (9176054865)") — strip any embedded
+   number-looking run before display, since this field has no dedicated
+   contact column to mask instead. */
+function stripPhoneNumbers(text){
+  if(!text) return text;
+  let out = text;
+  out = out.replace(/\d[\d\s\-]{5,}\d/g, '').replace(/\d{7,}/g, '');
+  out = out.replace(/\(\s*\)/g, '');
+  out = out.replace(/\([^)]*$/g, '');
+  out = out.replace(/\(\s*(?=[,)]|$)/g, '');
+  out = out.replace(/\s+,/g, ',').replace(/,\s*,/g, ',').replace(/^[\s,\-]+|[\s,\-]+$/g, '').replace(/\s{2,}/g, ' ').trim();
+  return out;
 }
 function fmtPct(n){ return (n*100).toFixed(1) + '%'; }
 function esc(s){
@@ -1288,7 +1316,7 @@ function historicResultHtml(d){
       ${streakBanner}
       ${certButton}
       <dl class="fact-grid">
-        <div><dt>Buddy</dt><dd>${esc(d.buddy||'—')}</dd></div>
+        <div><dt>Buddy</dt><dd>${esc(stripPhoneNumbers(d.buddy)||'—')}</dd></div>
         <div><dt>Slot date</dt><dd>${esc(d.slot_date||'—')}</dd></div>
         <div><dt>Slot</dt><dd>${esc(d.slot_no||'—')}</dd></div>
         <div><dt>Parayanams completed</dt><dd>${d.completed ?? '—'}</dd></div>
@@ -1783,7 +1811,7 @@ function renderYearContent(){
       slotBarRow(s.slot, s.time, s.booked, s.capacity, maxSlot, 'gold')
     ).join('');
     const maxBatch = Math.max(...d.by_batch.map(s=>s.bookings));
-    document.getElementById('y2026batch').innerHTML = d.by_batch.map(s=>
+    document.getElementById('y2026batch').innerHTML = sortByBatchNumber(d.by_batch, 'batch').map(s=>
       barRow(s.batch, s.bookings, maxBatch, '', s.bookings)
     ).join('');
     el.querySelector('[data-goto="upcoming"]').addEventListener('click', (e)=>{e.preventDefault(); showView('upcoming');});
@@ -1933,11 +1961,10 @@ function renderReportContent(){
       rows: hist.wr_achievers,
       columns: [
         {label:'Name', key:'name'}, {label:'Batch', key:'batch'},
-        {label:'Buddy', key:'buddy'}, {label:'Completed', key:'completed'},
-        {label:'Streak', key:'parayan_counter'},
+        {label:'Completed', key:'completed'}, {label:'Streak', key:'parayan_counter'},
       ],
       filename:'world_record_achievers.csv',
-      filterFields:['name','batch','buddy'],
+      filterFields:['name','batch'],
     });
   } else if(currentReport==='pending2025'){
     makeFilterableReport(el, {
@@ -1945,8 +1972,7 @@ function renderReportContent(){
       rows: hist.pending_2025,
       columns: [
         {label:'Name', key:'name'}, {label:'Batch', key:'batch'},
-        {label:'Buddy', key:'buddy'}, {label:'Status', key:'status'},
-        {label:'Notes', key:'notes'},
+        {label:'Status', key:'status'}, {label:'Notes', key:'notes'},
       ],
       filename:'pending_dropped_2025.csv',
       filterFields:['name','batch','status'],
