@@ -866,6 +866,41 @@ const LOGO_DATA_URI = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSU
 </script>
 <script>
 /* ============ Utilities ============ */
+/* Admin: paste the deployed URL of the 2026 booking system's own Apps
+   Script here (the one behind Code.gs / Dashboard.gs / PublicRegisterFeed.gs)
+   to make the 2026 Gita Jayanti section live instead of a fixed snapshot.
+   Leave blank to keep using the snapshot embedded in this file — the site
+   works either way. */
+const BOOKING_2026_API_URL = "";
+let usingLive2026 = false;
+
+async function loadLiveBooking2026Data(){
+  if(!BOOKING_2026_API_URL) return false;
+  try{
+    const res = await fetch(`${BOOKING_2026_API_URL}?action=getRegisterFeed`);
+    const data = await res.json();
+    if(!data.ok || !data.data) return false;
+    const live = data.data;
+    function buddyMissing(v){
+      if(!v) return true;
+      const s = String(v).trim().toLowerCase();
+      return s === '' || s === '????' || s === 'none';
+    }
+    APP_DATA.booking2026.bookings = [...live.bookings].sort((a,b) => (b.booked_at||'').localeCompare(a.booked_at||''));
+    APP_DATA.booking2026.awaiting = live.awaiting;
+    APP_DATA.booking2026.dashboard = live.dashboard;
+    APP_DATA.booking2026.buddy_needed = live.bookings.filter(b => buddyMissing(b.buddy_name));
+    const trend = APP_DATA.all_years.completions_trend;
+    trend[trend.length-1].completed = live.dashboard.total_slots_booked;
+    APP_DATA.all_years.total_2026_registered = live.dashboard.people_count;
+    usingLive2026 = true;
+    return true;
+  }catch(e){
+    console.warn('Live 2026 feed unavailable — falling back to the embedded snapshot.', e);
+    return false;
+  }
+}
+
 function norm(s){ return (s||'').toString().trim().toLowerCase().replace(/\s+/g,' '); }
 function normContact(s){ return (s||'').toString().replace(/[^0-9]/g,'').slice(-10); }
 /* Sorts "Batch N (...)" rows numerically by N; anything without a
@@ -1135,8 +1170,9 @@ function renderHome(){
   document.getElementById('homeStats').innerHTML = stats.map(s =>
     `<div class="stat"><div class="num">${s.num}</div><div class="lbl">${esc(s.lbl)}</div></div>`
   ).join('');
-  document.getElementById('homeLastUpdated').textContent =
-    `2021–2025 history last refreshed ${APP_DATA.meta.historic_last_refreshed} · 2026 booking data last refreshed ${b26.dashboard.last_refreshed}`;
+  document.getElementById('homeLastUpdated').textContent = usingLive2026
+    ? `2021–2025 history last refreshed ${APP_DATA.meta.historic_last_refreshed} · 2026 booking data is live, updated ${b26.dashboard.last_refreshed}`
+    : `2021–2025 history last refreshed ${APP_DATA.meta.historic_last_refreshed} · 2026 booking data last refreshed ${b26.dashboard.last_refreshed}`;
 }
 
 /* ---- Home "Hello" box: one search, three shortcuts ---- */
@@ -1203,11 +1239,11 @@ function getSuggestions(q){
   const seenBooking = new Set();
   APP_DATA.booking2026.bookings
     .filter(b => (nq.length>=2 && norm(b.name).includes(nq)) || (nc.length>=3 && normContact(b.contact).includes(nc)))
-    .forEach(b => { out.push({type:'booking2026', label:b.name, meta:'2026 booking · '+(b.contact||'')+' · '+(b.batch||''), key:b}); seenBooking.add(norm(b.name)); });
+    .forEach(b => { out.push({type:'booking2026', label:b.name, meta:'2026 booking · '+maskContact(b.contact)+' · '+(b.batch||''), key:b}); seenBooking.add(norm(b.name)); });
 
   APP_DATA.booking2026.awaiting
     .filter(p => !seenBooking.has(norm(p.name)) && ((nq.length>=2 && norm(p.name).includes(nq)) || (nc.length>=3 && normContact(p.contact).includes(nc))))
-    .forEach(p => out.push({type:'awaiting2026', label:p.name, meta:'2026 · awaiting a slot · '+(p.contact||''), key:p}));
+    .forEach(p => out.push({type:'awaiting2026', label:p.name, meta:'2026 · awaiting a slot · '+maskContact(p.contact), key:p}));
 
   return out.slice(0,8);
 }
@@ -1461,7 +1497,7 @@ document.addEventListener('click', (e)=>{
 /* ============ MY PROFILE (live, backed by a Google Sheet) ============ */
 /* Admin: after deploying the Apps Script web app (see setup instructions),
    paste its URL below between the quotes, then save this file. */
-const PROFILE_API_URL = "https://script.google.com/macros/s/AKfycby8X1jiK7hVYbApZlBHJVORhYy8X0AD0Xt-keXQiDLm5DEC6nQTqf8Ker93ZptwZn1osg/exec";
+const PROFILE_API_URL = "https://script.google.com/macros/s/AKfycbzWt9UpJmY27tgBi2PXq-vEolb9KZdN8FxRRHScbjW1NqBcYbPg5ILgRoPMjKQdwk92/exec";
 
 const SALUTATIONS = ['Shri','Smt.','Kum.','Chi.'];
 const MOTHER_TONGUES = ['Tamil','Telugu','Kannada','Malayalam','Hindi','Marathi','Gujarati','Bengali','Punjabi','Odia','Assamese','Konkani','Marwari','Sindhi','Sanskrit','Urdu','English'];
@@ -2088,18 +2124,23 @@ function renderUpcoming(){
 }
 
 /* ============ INIT ============ */
-renderHome();
-renderYearPills();
-renderYearContent();
-renderAllYears();
-renderReportTabs();
-renderReportContent();
-renderUpcoming();
-initProfileTab();
-initFeedbackTab();
-initPlaylistTab();
-document.getElementById('yearlyLastUpdated').textContent =
-  `2021–2025 years last refreshed ${APP_DATA.meta.historic_last_refreshed} · 2026 last refreshed ${APP_DATA.booking2026.dashboard.last_refreshed}`;
+async function initApp(){
+  await loadLiveBooking2026Data();
+  renderHome();
+  renderYearPills();
+  renderYearContent();
+  renderAllYears();
+  renderReportTabs();
+  renderReportContent();
+  renderUpcoming();
+  initProfileTab();
+  initFeedbackTab();
+  initPlaylistTab();
+  document.getElementById('yearlyLastUpdated').textContent = usingLive2026
+    ? `2021–2025 years last refreshed ${APP_DATA.meta.historic_last_refreshed} · 2026 is live, updated ${APP_DATA.booking2026.dashboard.last_refreshed}`
+    : `2021–2025 years last refreshed ${APP_DATA.meta.historic_last_refreshed} · 2026 last refreshed ${APP_DATA.booking2026.dashboard.last_refreshed}`;
+}
+initApp();
 
 </script>
 </body>
